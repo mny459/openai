@@ -90,7 +90,9 @@ abstract final class OpenAINetworkingClient {
     final uri = Uri.parse(from);
     final headers = HeadersBuilder.build();
 
-    final response = await http.get(uri, headers: headers);
+    final client = createClient();
+
+    final response = await client.get(uri, headers: headers);
 
     if (returnRawResponse) {
       return response.body as T;
@@ -129,7 +131,7 @@ abstract final class OpenAINetworkingClient {
   }) {
     final controller = StreamController<T>();
 
-    final client = http.Client();
+    final client = createClient();
     final uri = Uri.parse(from);
 
     final httpMethod = OpenAIStrings.getMethod;
@@ -191,8 +193,10 @@ abstract final class OpenAINetworkingClient {
     final uri = Uri.parse(to);
     final headers = HeadersBuilder.build();
     final handledBody = body != null ? jsonEncode(body) : null;
+    final client = createClient();
 
-    final response = await http.post(uri, headers: headers, body: handledBody);
+    final response =
+        await client.post(uri, headers: headers, body: handledBody);
 
     OpenAILogger.requestToWithStatusCode(to, response.statusCode);
 
@@ -233,18 +237,7 @@ abstract final class OpenAINetworkingClient {
     try {
       final client = createClient();
 
-      final uri = Uri.parse(to);
-
       final headers = HeadersBuilder.build();
-
-      final httpMethod = OpenAIStrings.postMethod;
-
-      final request = http.Request(httpMethod, uri);
-
-      request.headers.addAll(headers);
-
-      request.body = jsonEncode(body);
-
       Future<void> close() {
         return Future.wait([
           Future.delayed(Duration.zero, client.close),
@@ -253,16 +246,28 @@ abstract final class OpenAINetworkingClient {
       }
 
       OpenAILogger.logStartRequest(to);
+
+      final request = http.Request(OpenAIStrings.postMethod, Uri.parse(to));
+      request.headers.addAll(headers);
+      request.body = jsonEncode(body);
+
       client.send(request).then(
-        (respond) {
-          OpenAILogger.startReadStreamResponse();
+            (respond) {
+              OpenAILogger.startReadStreamResponse();
+          final statusCode = respond.statusCode;
+          if (statusCode != 200) {
+            final exception = RequestFailedException(
+                "Request failed with status code $statusCode", statusCode);
+            OpenAILogger.errorOcurred(exception);
+            controller.addError(exception);
 
-          final stream = respond.stream
+            return;
+          }
+              respond.stream
               .transform(utf8.decoder)
-              .transform(openAIChatStreamLineSplitter);
-
-          stream.listen(
-            (value) {
+              .transform(openAIChatStreamLineSplitter)
+              .listen(
+                (value) {
               final data = value;
 
               final dataLines = data
@@ -290,9 +295,8 @@ abstract final class OpenAINetworkingClient {
 
                 if (doesErrorExists(decodedData)) {
                   final error = decodedData[OpenAIStrings.errorFieldKey]
-                      as Map<String, dynamic>;
+                  as Map<String, dynamic>;
                   final message = error[OpenAIStrings.messageFieldKey];
-                  final statusCode = respond.statusCode;
                   final exception = RequestFailedException(message, statusCode);
 
                   controller.addError(exception);
@@ -310,9 +314,7 @@ abstract final class OpenAINetworkingClient {
         onError: (error, stackTrace) {
           controller.addError(error, stackTrace);
         },
-      ).catchError((e) {
-        controller.addError(e);
-      });
+      );
     } catch (e) {
       controller.addError(e);
     }
@@ -351,7 +353,9 @@ abstract final class OpenAINetworkingClient {
 
     request.fields.addAll(body);
 
-    final http.StreamedResponse response = await request.send();
+    final client = createClient();
+
+    final http.StreamedResponse response = await client.send(request);
 
     OpenAILogger.requestToWithStatusCode(to, response.statusCode);
 
@@ -400,7 +404,9 @@ abstract final class OpenAINetworkingClient {
 
     request.files.add(imageFile);
 
-    final http.StreamedResponse response = await request.send();
+    final client = createClient();
+
+    final http.StreamedResponse response = await client.send(request);
 
     OpenAILogger.requestToWithStatusCode(to, response.statusCode);
 
@@ -450,7 +456,9 @@ abstract final class OpenAINetworkingClient {
     request.files.add(multiPartFile);
     request.fields.addAll(body);
 
-    final http.StreamedResponse response = await request.send();
+    final client = createClient();
+
+    final http.StreamedResponse response = await client.send(request);
 
     OpenAILogger.requestToWithStatusCode(to, response.statusCode);
 
@@ -486,7 +494,9 @@ abstract final class OpenAINetworkingClient {
     final headers = HeadersBuilder.build();
     final uri = Uri.parse(from);
 
-    final response = await http.delete(uri, headers: headers);
+    final client = createClient();
+
+    final response = await client.delete(uri, headers: headers);
 
     OpenAILogger.requestToWithStatusCode(from, response.statusCode);
 

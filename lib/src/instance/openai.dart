@@ -28,15 +28,18 @@ final class OpenAI extends OpenAIClientBase {
 
   /// The API key used to authenticate the requests.
   static String? _internalApiKey;
+  static OpenAiConfig? _config;
 
   /// The singleton instance of [OpenAI], make sure to call the [OpenAI.initialize] method before accessing [instance], otherwise it will throw an [Exception].
   /// A [MissingApiKeyException] will be thrown, if the API key is not set.
   static OpenAI get instance {
-    if (_internalApiKey == null) {
+    if (_internalApiKey == null || _internalApiKey!.isEmpty) {
       throw MissingApiKeyException("""
       You must set the api key before accessing the instance of this class.
       Example:
       OpenAI.apiKey = "Your API Key";
+      or:
+      OpenAI.config = OpenAiConfig("Your API Key");
       """);
     }
 
@@ -76,6 +79,15 @@ final class OpenAI extends OpenAIClientBase {
 
   /// The organization id, if set, it will be used in all the requests to the OpenAI API.
   static String? get organization => HeadersBuilder.organization;
+
+  static String? get proxy => _config?.proxy;
+
+  static set config(OpenAiConfig config) {
+    _config = config;
+    _internalApiKey = config.apiKey;
+    HeadersBuilder.apiKey = config.apiKey;
+    OpenAIConfig.baseUrl = config.baseUrl;
+  }
 
   /// This is used to initialize the [OpenAI] instance, by providing the API key.
   /// All the requests will be authenticated using this API key.
@@ -117,4 +129,27 @@ final class OpenAI extends OpenAIClientBase {
 
   /// The constructor of [OpenAI]. It is private, so you can only access the instance by calling the [OpenAI.instance] getter.
   OpenAI._();
+}
+
+class OpenAiConfig {
+  /// This is used to initialize the [OpenAI] instance, by providing the API key.
+  /// All the requests will be authenticated using this API key.
+  final String apiKey;
+
+  /// This is used to set the base url of the OpenAI API, by default it is set to [OpenAIConfig.baseUrl].
+  final String? baseUrl;
+  final String? proxy;
+
+  /// This controls whether to log steps inside the process of making a request, this helps debugging and pointing where something went wrong.
+  /// This uses  [dart:developer] internally, so it will show anyway only while debugging code.
+  ///
+  /// By default it is set to [true].
+  final bool showLogs;
+
+  OpenAiConfig(
+    this.apiKey, {
+    this.baseUrl,
+    this.proxy,
+    this.showLogs = true,
+  });
 }
