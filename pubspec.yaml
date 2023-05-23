@@ -19,3 +19,4 @@ dependencies:
   meta: ^1.8.0
   collection: ^1.17.0
   fetch_client: ^1.0.0
+  dio: ^5.1.2

@@ -6,6 +6,7 @@ import "package:dart_openai/src/core/utils/http_client_web.dart"
 import "package:dart_openai/openai.dart";
 import "package:dart_openai/src/core/builder/headers.dart";
 import "package:dart_openai/src/core/utils/logger.dart";
+import "package:dio/dio.dart";
 import "package:http/http.dart" as http;
 import "package:meta/meta.dart";
 
@@ -235,7 +236,7 @@ abstract final class OpenAINetworkingClient {
     final controller = StreamController<T>();
 
     try {
-      final client = createClient();
+      final client = createDio();
 
       final headers = HeadersBuilder.build();
       Future<void> close() {
@@ -245,16 +246,16 @@ abstract final class OpenAINetworkingClient {
         ]);
       }
 
+      final options =
+          Options(headers: headers, responseType: ResponseType.stream);
+
       OpenAILogger.logStartRequest(to);
 
-      final request = http.Request(OpenAIStrings.postMethod, Uri.parse(to));
-      request.headers.addAll(headers);
-      request.body = jsonEncode(body);
-
-      client.send(request).then(
-            (respond) {
-              OpenAILogger.startReadStreamResponse();
-          final statusCode = respond.statusCode;
+      client.post(to, data: body, options: options).then(
+        (respond) {
+          OpenAILogger.startReadStreamResponse();
+          final body = respond.data as ResponseBody;
+          final statusCode = respond.statusCode ?? 200;
           if (statusCode != 200) {
             final exception = RequestFailedException(
                 "Request failed with status code $statusCode", statusCode);
@@ -263,12 +264,9 @@ abstract final class OpenAINetworkingClient {
 
             return;
           }
-              respond.stream
-              .transform(utf8.decoder)
-              .transform(openAIChatStreamLineSplitter)
-              .listen(
-                (value) {
-              final data = value;
+          body.stream.listen(
+            (value) {
+              final data = utf8.decode(value, allowMalformed: true);
 
               final dataLines = data
                   .split("\n")
@@ -295,7 +293,7 @@ abstract final class OpenAINetworkingClient {
 
                 if (doesErrorExists(decodedData)) {
                   final error = decodedData[OpenAIStrings.errorFieldKey]
-                  as Map<String, dynamic>;
+                      as Map<String, dynamic>;
                   final message = error[OpenAIStrings.messageFieldKey];
                   final exception = RequestFailedException(message, statusCode);
 
@@ -306,8 +304,8 @@ abstract final class OpenAINetworkingClient {
             onDone: () {
               close();
             },
-            onError: (error, stackTrace) {
-              controller.addError(error, stackTrace);
+            onError: (err) {
+              controller.addError(err);
             },
           );
         },
